@@ -1,0 +1,16 @@
+{
+  "name": "ai-assistant",
+  "version": "0.0.0",
+  "private": true,
+  "description": "前后端分离脚手架：React + Vite 前端，Spring Boot 单体 + H2 后端",
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c blue,green \"npm:dev:backend\" \"npm:dev:frontend\"",
+    "dev:backend": "cd backend && mvnw spring-boot:run",
+    "dev:frontend": "pnpm --dir frontend dev",
+    "build": "pnpm --dir frontend build",
+    "test:backend": "cd backend && mvnw test"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.6"
+  }
+}

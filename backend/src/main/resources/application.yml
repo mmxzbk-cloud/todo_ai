@@ -1,0 +1,57 @@
+spring:
+  application:
+    name: ai-assistant-backend
+
+  # H2 文件模式：数据落在 backend/data/ 下，重启不丢。改回内存库只需把 url 换成
+  # jdbc:h2:mem:aiassistant 并加上 DB_CLOSE_DELAY=-1。
+  datasource:
+    url: jdbc:h2:file:./data/aiassistant
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+
+  jpa:
+    hibernate:
+      # 表结构由 Flyway 的脚本定义，实体只做校验：映射与 SQL 不一致时启动即失败，
+      # 而不是等到某次查询才炸。改结构要新增迁移脚本，不允许由实体反推。
+      ddl-auto: validate
+    # 出参一律走 dto，事务边界在 Service：没有「视图期还能懒加载」这个例外
+    open-in-view: false
+
+  flyway:
+    # V1__init_schema.sql 等在 classpath:db/migration（默认位置），启动时按版本执行
+    enabled: true
+    locations: classpath:db/migration
+
+  h2:
+    console:
+      # 浏览器打开 http://localhost:8080/h2-console
+      # JDBC URL 填 jdbc:h2:file:./data/aiassistant，用户名 sa，密码留空
+      enabled: true
+
+server:
+  port: 8080
+
+app:
+  auth:
+    # 开发默认值。生产必须用环境变量 APP_AUTH_JWT_SECRET 覆盖，且至少 32 字节：
+    # 仓库里的默认值对所有人可见，用它可以自签出任何账号的令牌，只能用于本机开发。
+    jwt-secret: ${APP_AUTH_JWT_SECRET:dev-only-jwt-secret-do-not-use-in-production-2026}
+    # 时长用 ISO-8601 写法（PT2H=2 小时，P30D=30 天）
+    access-token-ttl: PT2H
+    refresh-token-ttl: P30D
+    # 置为 false 后 /api/v1/auth/register 返回 403，已注册账号不受影响
+    registration-enabled: true
+
+logging:
+  pattern:
+    # %X{requestId} 由 RequestIdFilter 放进 MDC；定时任务线程上没有这个键，会输出空的一对方括号
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{requestId}] %logger{36} - %msg%n"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # 只放行这三个。管理端点里不少是「能改运行状态」的（如 shutdown、env），
+        # 不应该因为「顺手」而开放
+        include: health,info,metrics

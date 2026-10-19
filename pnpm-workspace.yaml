@@ -1,0 +1,4 @@
+# 把 frontend 纳入 workspace，这样在根目录执行一次 pnpm install
+# 就能同时装好根目录的 concurrently 和前端的依赖。
+packages:
+  - frontend

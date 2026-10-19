@@ -1,0 +1,14 @@
+# 依赖
+node_modules/
+
+# 构建产物（前端产物在 frontend/dist，由 frontend/.gitignore 负责）
+target/
+
+# 编辑器与系统文件
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# 后端本地数据：H2 文件库
+backend/data/
