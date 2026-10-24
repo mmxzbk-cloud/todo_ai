@@ -67,6 +67,7 @@ class UserSettingServiceTest {
 	void settingsAreStoredPerUser() {
 		when(repository.findById(1L)).thenReturn(Optional.empty());
 		when(repository.findById(2L)).thenReturn(Optional.empty());
+		when(repository.save(any(UserSetting.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
 		service.setAiEnabled(1L, true);
 

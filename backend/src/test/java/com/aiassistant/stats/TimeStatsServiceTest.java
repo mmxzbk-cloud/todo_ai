@@ -37,6 +37,9 @@ import com.aiassistant.task.dto.TaskResponse;
 /**
  * 统计聚合的口径验证：归日时区、无项目归属、区间校验、进行中不进合计。
  * 流水来自仓储 stub——仓储层「只取已结束流水」的过滤在 SQL 侧，这里验证服务层对结果的处理。
+ *
+ * 注意：会创建 mock 的辅助方法一律在 when(...) 外先调用。Mockito 不允许在外层
+ * stubbing 未完成时又对另一个 mock 做 stub（UnfinishedStubbing）。
  */
 @ExtendWith(MockitoExtension.class)
 class TimeStatsServiceTest {
@@ -111,10 +114,10 @@ class TimeStatsServiceTest {
 		// 2026-10-23T18:00Z 在东八区是 10-24 02:00：这条流水必须归到 10-24
 		TaskTimeLog night = log(101, "2026-10-23T18:00:00Z", 30);
 		TaskTimeLog morning = log(101, "2026-10-24T02:00:00Z", 60);
+		Task dataTask = task(101, null, "整理数据");
 		when(timeLogRepository.findByOwnerIdAndEndedAtIsNotNullAndStartedAtGreaterThanEqualAndStartedAtLessThan(
 				any(), any(), any())).thenReturn(List.of(night, morning));
-		when(taskRepository.findByIdInAndOwnerId(List.of(101L), OWNER))
-				.thenReturn(List.of(task(101, null, "整理数据")));
+		when(taskRepository.findByIdInAndOwnerId(List.of(101L), OWNER)).thenReturn(List.of(dataTask));
 
 		TimeStatsResponse response = service.stats(OWNER, ZONE, LocalDate.of(2026, 10, 24), LocalDate.of(2026, 10, 24));
 
@@ -135,13 +138,15 @@ class TimeStatsServiceTest {
 	void splitsProjectsAndSharesRoundedToFourDecimals() {
 		TaskTimeLog onProject = log(201, "2026-10-24T01:00:00Z", 75);
 		TaskTimeLog offProject = log(202, "2026-10-24T02:00:00Z", 25);
+		Task projectTask = task(201, 5L, "项目任务");
+		Task offProjectTask = task(202, null, "琐事");
+		Project project = org.mockito.Mockito.mock(Project.class);
 		when(timeLogRepository.findByOwnerIdAndEndedAtIsNotNullAndStartedAtGreaterThanEqualAndStartedAtLessThan(
 				any(), any(), any())).thenReturn(List.of(onProject, offProject));
 		when(taskRepository.findByIdInAndOwnerId(List.of(201L, 202L), OWNER))
-				.thenReturn(List.of(task(201, 5L, "项目任务"), task(202, null, "琐事")));
-		Project project = org.mockito.Mockito.mock(Project.class);
-		lenient().when(project.getId()).thenReturn(5L);
-		lenient().when(project.getName()).thenReturn("AI 助手");
+				.thenReturn(List.of(projectTask, offProjectTask));
+		when(project.getId()).thenReturn(5L);
+		when(project.getName()).thenReturn("AI 助手");
 		when(projectRepository.findByOwnerIdAndIdIn(OWNER, java.util.Set.of(5L))).thenReturn(List.of(project));
 
 		TimeStatsResponse response = service.stats(OWNER, ZONE, LocalDate.of(2026, 10, 24), LocalDate.of(2026, 10, 24));
@@ -160,16 +165,15 @@ class TimeStatsServiceTest {
 	@Test
 	void reportsRunningTimerSeparately() {
 		TaskTimeLog closed = log(301, "2026-10-24T01:00:00Z", 20);
-		when(timeLogRepository.findByOwnerIdAndEndedAtIsNotNullAndStartedAtGreaterThanEqualAndStartedAtLessThan(
-				any(), any(), any())).thenReturn(List.of(closed));
-		when(taskRepository.findByIdInAndOwnerId(List.of(301L), OWNER))
-				.thenReturn(List.of(task(301, null, "写周报")));
-
-		Task runningTask = task(301, null, "写周报");
+		Task writeTask = task(301, null, "写周报");
 		TimeLogResponse runningLog = new TimeLogResponse(999L, 301L, Instant.parse("2026-10-24T03:00:00Z"), null, 0,
 				"TIMER", null);
-		when(timerService.findRunning(OWNER))
-				.thenReturn(Optional.of(new RunningTimerResponse(runningLog, TaskResponse.from(runningTask))));
+		// from() 会调用 mock 的读取方法，必须在外层 when(...) 完成之前执行
+		RunningTimerResponse runningResponse = new RunningTimerResponse(runningLog, TaskResponse.from(writeTask));
+		when(timeLogRepository.findByOwnerIdAndEndedAtIsNotNullAndStartedAtGreaterThanEqualAndStartedAtLessThan(
+				any(), any(), any())).thenReturn(List.of(closed));
+		when(taskRepository.findByIdInAndOwnerId(List.of(301L), OWNER)).thenReturn(List.of(writeTask));
+		when(timerService.findRunning(OWNER)).thenReturn(Optional.of(runningResponse));
 
 		TimeStatsResponse response = service.stats(OWNER, ZONE, LocalDate.of(2026, 10, 24), LocalDate.of(2026, 10, 24));
 
