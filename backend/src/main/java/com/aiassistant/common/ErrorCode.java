@@ -37,5 +37,18 @@ public enum ErrorCode {
 	/** 建议类接口触发每用户限流（HTTP 429）。 */
 	AI_RATE_LIMITED,
 	/** AI 返回内容为空或缺少必要字段，按失败处理（HTTP 503）。 */
-	AI_EMPTY_RESULT
+	AI_EMPTY_RESULT,
+	// ---- 资讯模块（AI与高校课程考核资讯 PRD 第五章 5.4）：错误码只增不改 ----
+	/** 试抓/采集在超时时限内没有完成（HTTP 504）。 */
+	FETCH_TIMEOUT,
+	/** 来源不可达或请求失败（采集时记入健康状态，试抓时按失败返回）。 */
+	FETCH_FAILED,
+	/** 网页解析失败或没有解析出任何条目。 */
+	PARSE_FAILED,
+	/** 目标站点 robots.txt 禁止抓取（HTTP 400，保存与试抓时拒绝）。 */
+	ROBOTS_DISALLOWED,
+	/** 手动「立即采集」触发过频（HTTP 429）。 */
+	FETCH_RATE_LIMITED,
+	/** 同名来源已存在（HTTP 409）。 */
+	NEWS_SOURCE_NAME_TAKEN
 }

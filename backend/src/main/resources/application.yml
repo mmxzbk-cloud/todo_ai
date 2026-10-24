@@ -54,6 +54,19 @@ app:
     # 每用户每分钟建议请求上限（防连击与成本失控，A.4 第 6 条的默认值）
     rate-limit-per-minute: 10
 
+  news:
+    # 资讯采集（AI与高校课程考核资讯 PRD）：数值均为 A.4 的建议值，评审拍板后直接改这里
+    # 每日 06:30 采集，与 03:30 的耗时对账错峰
+    collect-cron: "0 30 6 * * *"
+    source-timeout: PT60S
+    page-timeout: PT10S
+    max-items-per-source: 50
+    max-sources-per-user: 20
+    failure-threshold: 3
+    ai-content-limit: 5000
+    content-max-length: 20000
+    manual-collect-interval: PT5M
+
 logging:
   pattern:
     # %X{requestId} 由 RequestIdFilter 放进 MDC；定时任务线程上没有这个键，会输出空的一对方括号
