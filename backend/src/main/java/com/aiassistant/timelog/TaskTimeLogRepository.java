@@ -48,4 +48,11 @@ public interface TaskTimeLogRepository extends JpaRepository<TaskTimeLog, Long> 
 	 */
 	@Query("SELECT log.taskId, SUM(log.minutes) FROM TaskTimeLog log GROUP BY log.taskId")
 	List<Object[]> sumMinutesGroupedByTask();
+
+	/**
+	 * 耗时统计用：某用户在 [start, end) 区间内已结束的流水（按 started_at 命中索引 ix_task_time_logs_owner）。
+	 * 进行中的段落（ended_at IS NULL）刻意排除——它 minutes=0 且还在变，不应进入任何合计（PRD US-05 规则 2）。
+	 */
+	List<TaskTimeLog> findByOwnerIdAndEndedAtIsNotNullAndStartedAtGreaterThanEqualAndStartedAtLessThan(
+			Long ownerId, Instant start, Instant end);
 }

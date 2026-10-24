@@ -87,4 +87,10 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
 			ORDER BY CASE WHEN t.dueOn IS NULL THEN 1 ELSE 0 END, t.dueOn ASC, t.priority ASC, t.id DESC
 			""")
 	List<Task> findBoard(@Param("ownerId") Long ownerId, @Param("statuses") Collection<TaskStatus> statuses);
+
+	/**
+	 * 批量按 id 取任务（不筛 deleted_at）：耗时统计要展示流水归属的任务标题，
+	 * 软删任务的流水仍在统计口径里，标题一并给出来而不是显示成空。
+	 */
+	List<Task> findByIdInAndOwnerId(Collection<Long> ids, Long ownerId);
 }

@@ -60,6 +60,18 @@ public class GlobalExceptionHandler {
 		return error(HttpStatus.FORBIDDEN, ex.getCode(), ex.getMessage());
 	}
 
+	/** AI 调用超时。任务数据不变，前端按 AI_TIMEOUT 给「稍后再试」与重试入口。 */
+	@ExceptionHandler(GatewayTimeoutException.class)
+	public ResponseEntity<ApiError> handleGatewayTimeout(GatewayTimeoutException ex) {
+		return error(HttpStatus.GATEWAY_TIMEOUT, ex.getCode(), ex.getMessage());
+	}
+
+	/** AI 服务不可用或返回了空结果。与超时分开：503 的提示是「服务暂时不可用」。 */
+	@ExceptionHandler(ServiceUnavailableException.class)
+	public ResponseEntity<ApiError> handleServiceUnavailable(ServiceUnavailableException ex) {
+		return error(HttpStatus.SERVICE_UNAVAILABLE, ex.getCode(), ex.getMessage());
+	}
+
 	@ExceptionHandler(UnauthorizedException.class)
 	public ResponseEntity<ApiError> handleUnauthorized(UnauthorizedException ex) {
 		return error(HttpStatus.UNAUTHORIZED, ex.getCode(), ex.getMessage());

@@ -43,6 +43,17 @@ app:
     # 置为 false 后 /api/v1/auth/register 返回 403，已注册账号不受影响
     registration-enabled: true
 
+  ai:
+    # OpenAI 兼容服务（PRD A.4 第 2 条：密钥只走环境变量，与 APP_AUTH_JWT_SECRET 同模式）。
+    # 三项任一为空都视为未配置：AI 接口返回 AI_UNAVAILABLE，不会带空参数发起请求。
+    base-url: ${AI_BASE_URL:}
+    api-key: ${AI_API_KEY:}
+    model: ${AI_MODEL:}
+    # 单次 AI 调用的读取超时；建议类指标 P95 ≤ 15s，超时给到 30s 留余量
+    timeout: PT30S
+    # 每用户每分钟建议请求上限（防连击与成本失控，A.4 第 6 条的默认值）
+    rate-limit-per-minute: 10
+
 logging:
   pattern:
     # %X{requestId} 由 RequestIdFilter 放进 MDC；定时任务线程上没有这个键，会输出空的一对方括号

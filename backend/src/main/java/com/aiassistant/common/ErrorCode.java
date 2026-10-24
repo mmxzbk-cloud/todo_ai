@@ -26,5 +26,16 @@ public enum ErrorCode {
 	TIMER_NOT_RUNNING,
 	PROJECT_NAME_TAKEN,
 	TAG_NAME_TAKEN,
-	PROJECT_HAS_TASKS
+	PROJECT_HAS_TASKS,
+	// ---- AI 能力包（PRD 第五章 5.3）：错误码只增不改，前端按 code 判分支 ----
+	/** 用户级 AI 总开关处于关闭状态（HTTP 403）。 */
+	AI_DISABLED,
+	/** AI 服务在超时时限内没有返回（HTTP 504）。 */
+	AI_TIMEOUT,
+	/** AI 服务不可用或调用失败（HTTP 503）。 */
+	AI_UNAVAILABLE,
+	/** 建议类接口触发每用户限流（HTTP 429）。 */
+	AI_RATE_LIMITED,
+	/** AI 返回内容为空或缺少必要字段，按失败处理（HTTP 503）。 */
+	AI_EMPTY_RESULT
 }
