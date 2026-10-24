@@ -6,6 +6,7 @@ import java.time.ZoneId;
 import java.util.HashSet;
 import java.util.List;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -15,6 +16,7 @@ import com.aiassistant.common.BadRequestException;
 import com.aiassistant.common.ErrorCode;
 import com.aiassistant.common.PageResponse;
 import com.aiassistant.common.ResourceNotFoundException;
+import com.aiassistant.news.dto.AdoptRequest;
 import com.aiassistant.news.dto.ClassificationRequest;
 import com.aiassistant.news.dto.ItemDetailResponse;
 import com.aiassistant.news.dto.ItemResponse;
@@ -119,6 +121,47 @@ public class NewsItemService {
 			tags.forEach(tag -> itemTagRepository.save(new NewsItemTag(new NewsItemTagId(id, tag.getId()), now)));
 		}
 		return toDetail(itemRepository.save(item), ownerId);
+	}
+
+	/**
+	 * 采纳 AI 建议的分类与标签（AC 4.3）。标签采纳时把建议标签名解析为本人的标签，
+	 * 不存在的自动创建——否则建议标签对没建过标签的用户毫无用处。
+	 */
+	@Transactional
+	public ItemDetailResponse adoptAiSuggestions(Long ownerId, Long id, AdoptRequest request) {
+		NewsItem item = requireItem(ownerId, id);
+		if (Boolean.TRUE.equals(request.adoptCategory()) && item.getAiSuggestedCategory() != null) {
+			item.setCategory(item.getAiSuggestedCategory());
+		}
+		if (Boolean.TRUE.equals(request.adoptTags())) {
+			List<String> names = parseStringList(item.getAiSuggestedTags());
+			if (!names.isEmpty()) {
+				List<Tag> tags = names.stream()
+						.map(name -> resolveOrCreateTag(ownerId, name))
+						.toList();
+				itemTagRepository.deleteByItemId(id);
+				Instant now = Instant.now();
+				tags.forEach(tag -> itemTagRepository.save(new NewsItemTag(new NewsItemTagId(id, tag.getId()), now)));
+			}
+		}
+		return toDetail(itemRepository.save(item), ownerId);
+	}
+
+	private Tag resolveOrCreateTag(Long ownerId, String name) {
+		String trimmed = name.trim();
+		return tagRepository.findByOwnerIdAndName(ownerId, trimmed)
+				.filter(tag -> tag.getDeletedAt() == null)
+				.orElseGet(() -> {
+					Tag tag = new Tag();
+					tag.setOwnerId(ownerId);
+					tag.setName(trimmed.length() > 50 ? trimmed.substring(0, 50) : trimmed);
+					try {
+						return tagRepository.save(tag);
+					} catch (DataIntegrityViolationException ex) {
+						// 并发建同名标签撞唯一索引：回头读已有行
+						return tagRepository.findByOwnerIdAndName(ownerId, trimmed).orElseThrow(() -> ex);
+					}
+				});
 	}
 
 	// ---------------------------------------------------------------- 映射

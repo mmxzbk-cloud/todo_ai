@@ -1,6 +1,7 @@
 package com.aiassistant.news;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -53,6 +54,7 @@ public class NewsCollectionService {
 	private final ThreadPoolTaskExecutor executor;
 	private final TransactionTemplate transactionTemplate;
 	private final NewsSourceService sourceService;
+	private final NewsAiService aiService;
 
 	/** 同一来源同一时刻只跑一次采集：手动触发与定时任务撞车时，后到的一方直接跳过。 */
 	private final Map<Long, Boolean> runningSources = new ConcurrentHashMap<>();
@@ -68,7 +70,8 @@ public class NewsCollectionService {
 			NewsProperties properties,
 			@Qualifier("newsExecutor") ThreadPoolTaskExecutor executor,
 			PlatformTransactionManager transactionManager,
-			NewsSourceService sourceService) {
+			NewsSourceService sourceService,
+			NewsAiService aiService) {
 		this.sourceRepository = sourceRepository;
 		this.itemRepository = itemRepository;
 		this.fetchers = fetchers.stream()
@@ -78,6 +81,7 @@ public class NewsCollectionService {
 		this.executor = executor;
 		this.transactionTemplate = new TransactionTemplate(transactionManager);
 		this.sourceService = sourceService;
+		this.aiService = aiService;
 	}
 
 	// ---------------------------------------------------------------- 试抓（AC 1.3）
@@ -195,18 +199,23 @@ public class NewsCollectionService {
 			return;
 		}
 		try {
-			transactionTemplate.executeWithoutResult(status -> insertAndRecord(source, items));
+			List<Long> insertedIds = transactionTemplate.execute(status -> insertAndRecord(source, items));
+			// AI 处理在入库事务之外：摘要失败/跳过不影响已入库的条目（PRD US-04 降级规则）
+			if (insertedIds != null && !insertedIds.isEmpty()) {
+				aiService.processAfterCollection(source.getOwnerId(), insertedIds);
+			}
 		} catch (RuntimeException ex) {
 			log.error("来源 {} 条目入库失败", source.getId(), ex);
 			recordFailure(source, "入库失败：" + ex.getMessage());
 		}
 	}
 
-	/** 入库与健康状态同一事务（PRD 3.3：逐条事务，单条失败只跳过该条）。 */
-	private void insertAndRecord(NewsSource source, List<FetchedItem> items) {
+	/** 入库与健康状态同一事务（PRD 3.3：逐条事务，单条失败只跳过该条）。返回本次入库的条目 id。 */
+	private List<Long> insertAndRecord(NewsSource source, List<FetchedItem> items) {
 		int inserted = 0;
 		int duplicates = 0;
 		boolean truncated = false;
+		List<Long> insertedIds = new ArrayList<>();
 		for (FetchedItem item : items) {
 			if (inserted >= properties.getMaxItemsPerSource()) {
 				truncated = true;
@@ -230,7 +239,8 @@ public class NewsCollectionService {
 			entity.setPublishedAt(item.publishedAt());
 			entity.setCategory(source.getDefaultCategory());
 			entity.setAiStatus(NewsAiStatus.PENDING);
-			itemRepository.save(entity);
+			NewsItem saved = itemRepository.save(entity);
+			insertedIds.add(saved.getId());
 			inserted++;
 		}
 		String message = "新增 " + inserted + " 条，重复跳过 " + duplicates + " 条"
@@ -238,6 +248,7 @@ public class NewsCollectionService {
 		source.recordFetch(true, message, properties.getFailureThreshold());
 		sourceRepository.save(source);
 		log.info("来源 {}（{}）采集完成：{}", source.getId(), source.getName(), message);
+		return insertedIds;
 	}
 
 	private void recordFailure(NewsSource source, String message) {

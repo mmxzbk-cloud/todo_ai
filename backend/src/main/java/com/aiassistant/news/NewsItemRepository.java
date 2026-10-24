@@ -21,6 +21,15 @@ public interface NewsItemRepository extends JpaRepository<NewsItem, Long> {
 
 	Optional<NewsItem> findByIdAndOwnerId(Long id, Long ownerId);
 
+	/** 每日简报的数据源：当日（用户时区）新入库条目。 */
+	@Query("""
+			SELECT i FROM NewsItem i
+			WHERE i.ownerId = :ownerId AND i.createdAt >= :start AND i.createdAt < :end
+			ORDER BY i.createdAt DESC, i.id DESC
+			""")
+	List<NewsItem> findCreatedBetween(@Param("ownerId") Long ownerId,
+			@Param("start") Instant start, @Param("end") Instant end);
+
 	long countByOwnerIdAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(Long ownerId, Instant start, Instant end);
 
 	List<NewsItem> findByOwnerIdAndAiStatus(Long ownerId, NewsAiStatus aiStatus);
