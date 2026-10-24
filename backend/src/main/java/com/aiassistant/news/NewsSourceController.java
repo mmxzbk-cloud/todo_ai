@@ -18,6 +18,7 @@ import com.aiassistant.auth.CurrentUserProvider;
 import com.aiassistant.news.dto.EnabledRequest;
 import com.aiassistant.news.dto.SourceRequest;
 import com.aiassistant.news.dto.SourceResponse;
+import com.aiassistant.news.dto.TrialFetchResponse;
 
 import jakarta.validation.Valid;
 
@@ -30,10 +31,13 @@ import jakarta.validation.Valid;
 public class NewsSourceController {
 
 	private final NewsSourceService service;
+	private final NewsCollectionService collectionService;
 	private final CurrentUserProvider currentUserProvider;
 
-	public NewsSourceController(NewsSourceService service, CurrentUserProvider currentUserProvider) {
+	public NewsSourceController(NewsSourceService service, NewsCollectionService collectionService,
+			CurrentUserProvider currentUserProvider) {
 		this.service = service;
+		this.collectionService = collectionService;
 		this.currentUserProvider = currentUserProvider;
 	}
 
@@ -45,6 +49,12 @@ public class NewsSourceController {
 	@PostMapping
 	public SourceResponse create(@Valid @RequestBody SourceRequest request) {
 		return service.create(ownerId(), request);
+	}
+
+	/** 保存前试抓（AC 1.3）：立即抓一次返回预览，不写库。 */
+	@PostMapping("/trial")
+	public TrialFetchResponse trial(@Valid @RequestBody SourceRequest request) {
+		return collectionService.trialFetch(request);
 	}
 
 	@PutMapping("/{id}")

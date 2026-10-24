@@ -59,9 +59,9 @@ public class NewsSourceService {
 			throw new BadRequestException(ErrorCode.VALIDATION_FAILED,
 					"订阅来源已达上限（" + properties.getMaxSourcesPerUser() + " 个）");
 		}
-		String url = requireValidUrl(request.url());
-		requireRobotsAllowed(url);
-		String parseRule = requireParseRule(request);
+		String url = validateUrl(request.url());
+		assertRobotsAllowed(url);
+		String parseRule = serializeParseRule(request);
 
 		NewsSource source = new NewsSource();
 		source.setOwnerId(ownerId);
@@ -76,14 +76,16 @@ public class NewsSourceService {
 	@Transactional
 	public SourceResponse update(Long ownerId, Long id, SourceRequest request) {
 		NewsSource source = requireSource(ownerId, id);
-		String url = requireValidUrl(request.url());
+		String url = validateUrl(request.url());
 		if (!url.equals(source.getUrl())) {
 			// 换了地址才重新检查 robots：同地址重复检查一次网络往返，不值得
-			requireRobotsAllowed(url);
+			assertRobotsAllowed(url);
 		}
-		String parseRule = requireParseRule(request);
+		String parseRule = serializeParseRule(request);
 		applyRequest(source, request, url, parseRule);
-		if (Boolean.TRUE.equals(request.enabled()) && source.isAutoDisabled()) {
+		// 编辑配置或保持启用都算「人工修复过」：清掉连续失败标记，
+		// 否则一个修好了的来源会永远停在异常态、再也不被采集
+		if (!Boolean.FALSE.equals(request.enabled()) && source.isAutoDisabled()) {
 			source.resetFailureState();
 		}
 		try {
@@ -120,7 +122,7 @@ public class NewsSourceService {
 				.orElseThrow(() -> new ResourceNotFoundException(ErrorCode.NOT_FOUND, "来源不存在：id=" + id));
 	}
 
-	// ---------------------------------------------------------------- 规则落地
+	// ---------------------------------------------------------------- 规则落地（试抓与采集服务复用）
 
 	private void applyRequest(NewsSource source, SourceRequest request, String url, String parseRule) {
 		source.setName(request.name().trim());
@@ -131,7 +133,8 @@ public class NewsSourceService {
 		source.setEnabled(request.enabled() == null || request.enabled());
 	}
 
-	private String requireValidUrl(String rawUrl) {
+	/** URL 合法性：仅 http/https 且有 host（AC 1.4）。返回修剪后的原文。 */
+	public String validateUrl(String rawUrl) {
 		String trimmed = rawUrl == null ? "" : rawUrl.trim();
 		URI uri;
 		try {
@@ -146,14 +149,15 @@ public class NewsSourceService {
 		return trimmed;
 	}
 
-	private void requireRobotsAllowed(String url) {
+	/** robots 检查（AC 1.7）：禁止抓取的地址在保存与试抓时即拒绝。 */
+	public void assertRobotsAllowed(String url) {
 		if (!robotsChecker.isAllowed(url)) {
 			throw new BadRequestException(ErrorCode.ROBOTS_DISALLOWED, "该来源禁止自动抓取（robots.txt）");
 		}
 	}
 
 	/** 网页类型必须带结构完整的解析规则；RSS 忽略规则字段。落库存 JSON 字符串。 */
-	private String requireParseRule(SourceRequest request) {
+	public String serializeParseRule(SourceRequest request) {
 		if (request.type() == NewsSourceType.RSS) {
 			return null;
 		}
