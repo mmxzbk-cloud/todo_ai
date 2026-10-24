@@ -51,8 +51,16 @@ export function useBoard() {
   return useQuery({ queryKey: queryKeys.board, queryFn: tasksApi.board })
 }
 
-export function useTaskList(params: TaskListParams) {
-  return useQuery({ queryKey: queryKeys.tasks(params), queryFn: () => tasksApi.list(params) })
+/**
+ * 任务列表（GET /api/v1/tasks）。
+ * enabled 给「按需才拉」的界面用：看板的已取消折叠区收起时不发请求，展开才拉。
+ */
+export function useTaskList(params: TaskListParams, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: queryKeys.tasks(params),
+    queryFn: () => tasksApi.list(params),
+    enabled: options?.enabled,
+  })
 }
 
 /** 计时状态。data 为 null 表示没有计时在跑。 */
@@ -68,9 +76,11 @@ export function useCreateTask() {
   return useMutation({
     mutationFn: (input: TaskInput) => tasksApi.create(input),
     onSuccess: () => {
-      // 新建的任务可能同时出现在今日与看板里，两个都刷。
+      // 新建的任务可能同时出现在今日与看板里，两个都刷；列表也可以直接建成已关闭状态，
+      // 所以列表缓存（含看板的「已取消」折叠区）一并按前缀失效。
       void queryClient.invalidateQueries({ queryKey: queryKeys.today })
       void queryClient.invalidateQueries({ queryKey: queryKeys.board })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.taskLists })
     },
   })
 }
@@ -245,6 +255,9 @@ export function useChangeTaskStatus() {
       void queryClient.invalidateQueries({ queryKey: queryKeys.today })
       void queryClient.invalidateQueries({ queryKey: queryKeys.board })
       void queryClient.invalidateQueries({ queryKey: queryKeys.task(variables.id) })
+      // 改状态会改变任务属于哪些列表（取消/恢复都会进出 CANCELLED 列表），
+      // 按前缀失效所有任务列表，展开的「已取消」折叠区才不会停在旧数据上。
+      void queryClient.invalidateQueries({ queryKey: queryKeys.taskLists })
     },
   })
 }
