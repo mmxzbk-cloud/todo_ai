@@ -58,6 +58,17 @@ pnpm dev:backend    # 仅后端，http://localhost:8080
 pnpm dev:frontend   # 仅前端，http://localhost:5173
 ```
 
+端口被占用、进程残留或改完配置需要重来时，用 `restart:` 系列命令：先按端口结束旧进程，确认端口释放后再启动。
+
+```bash
+pnpm restart:all       # 前后端都重启
+pnpm restart:backend   # 仅重启后端
+pnpm restart:frontend  # 仅重启前端
+```
+
+脚本本身是 `scripts/restart-dev.ps1`，也可以直接执行 `.\scripts\restart-dev.ps1 -Target backend`。
+注意不要写成 `pnpm restart`：那是 pnpm 内置的生命周期命令，会去找 `stop` 脚本。
+
 ## 常用命令
 
 | 命令 | 说明 |
@@ -65,6 +76,9 @@ pnpm dev:frontend   # 仅前端，http://localhost:5173
 | `pnpm dev` | 同时启动前后端 |
 | `pnpm dev:backend` | 仅启动后端 |
 | `pnpm dev:frontend` | 仅启动前端 |
+| `pnpm restart:all` | 先停止 8080 和 5173 上的进程，再同时启动前后端 |
+| `pnpm restart:backend` | 只重启后端，前端不受影响 |
+| `pnpm restart:frontend` | 只重启前端，后端不受影响 |
 | `pnpm test:backend` | 跑后端测试 |
 | `pnpm build` | 前端生产构建（先 `tsc` 类型检查再打包） |
 
@@ -140,3 +154,5 @@ curl -X POST http://localhost:8080/api/tasks \
 ## 平台差异
 
 根目录的 `dev:backend` 脚本写的是 `mvnw`（Windows 下 cmd 会在当前目录找到 `mvnw.cmd`）。在 macOS 或 Linux 上请把它改成 `./mvnw`。
+
+`restart` 系列命令依赖 `scripts/restart-dev.ps1`，目前只支持 Windows（PowerShell 5.1+ 或 PowerShell 7）。macOS/Linux 上请手动结束占用 8080/5173 的进程后再执行 `pnpm dev`。

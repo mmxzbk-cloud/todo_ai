@@ -10,7 +10,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from '../api/client.ts'
 import { queryKeys } from '../api/queryKeys.ts'
 import { tasksApi } from '../api/tasks.ts'
-import type { BoardColumn, TaskInput, TaskListParams, TaskStatus, TaskSummary } from '../types/task.ts'
+import type {
+  BoardColumn,
+  Priority,
+  TaskInput,
+  TaskListParams,
+  TaskStatus,
+  TaskSummary,
+} from '../types/task.ts'
 
 /**
  * 把任意异常翻译成能给用户看的一句话。
@@ -85,6 +92,82 @@ export function useStartTimer() {
       if (errorCode(error) === 'TIMER_ALREADY_RUNNING') {
         void queryClient.invalidateQueries({ queryKey: queryKeys.runningTimer })
       }
+    },
+  })
+}
+
+/**
+ * 改优先级：与改状态同一套乐观更新规则。
+ * 优先级只影响排序与徽标，不改变「这条属于哪一列 / 还在不在今日」，所以回滚时不需要搬动任何元素，
+ * 把缓存里那条任务的 priority 换回去即可。
+ */
+export function useChangeTaskPriority() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, priority }: { id: number; priority: Priority }) =>
+      tasksApi.changePriority(id, priority),
+
+    onMutate: async ({ id, priority }) => {
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: queryKeys.today }),
+        queryClient.cancelQueries({ queryKey: queryKeys.board }),
+      ])
+
+      const previousToday = queryClient.getQueryData<TaskSummary[]>(queryKeys.today)
+      const previousBoard = queryClient.getQueryData<BoardColumn[]>(queryKeys.board)
+
+      if (previousToday) {
+        queryClient.setQueryData<TaskSummary[]>(
+          queryKeys.today,
+          previousToday.map((task) => (task.id === id ? { ...task, priority } : task)),
+        )
+      }
+      if (previousBoard) {
+        queryClient.setQueryData<BoardColumn[]>(
+          queryKeys.board,
+          previousBoard.map((column) => ({
+            ...column,
+            tasks: column.tasks.map((task) => (task.id === id ? { ...task, priority } : task)),
+          })),
+        )
+      }
+
+      return { previousToday, previousBoard }
+    },
+
+    onError: (_error, _variables, context) => {
+      if (context?.previousToday) queryClient.setQueryData(queryKeys.today, context.previousToday)
+      if (context?.previousBoard) queryClient.setQueryData(queryKeys.board, context.previousBoard)
+    },
+
+    onSettled: (_data, _error, variables) => {
+      // 服务端改了 updatedAt / version，以它为准重取一次。
+      void queryClient.invalidateQueries({ queryKey: queryKeys.today })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.board })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.task(variables.id) })
+    },
+  })
+}
+
+/**
+ * 结束计时。卡片与详情页的计时面板都走这里：结束的副作用（累加实际耗时、可能置为已完成）
+ * 由后端在一个事务里做，前端只负责把受影响的缓存刷掉。
+ */
+export function useStopTimer() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ taskId, logId, markDone }: { taskId: number; logId: number; markDone: boolean }) =>
+      tasksApi.stopTimer(taskId, logId, markDone),
+    onSuccess: (_result, { taskId }) => {
+      // 先用服务端事实把本地置成「没有在跑的计时」，避免重取返回前界面还停在计时态，
+      // 让人以为结束没生效而再点一次（再点会变成 TIMER_NOT_RUNNING 报错）。
+      queryClient.setQueryData(queryKeys.runningTimer, null)
+      void queryClient.invalidateQueries({ queryKey: queryKeys.runningTimer })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.task(taskId) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.today })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.board })
     },
   })
 }

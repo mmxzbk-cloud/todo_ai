@@ -5,23 +5,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from '../api/client.ts'
 import { queryKeys } from '../api/queryKeys.ts'
 import { tasksApi } from '../api/tasks.ts'
+import { useStopTimer } from '../hooks/useTasks.ts'
+import { formatElapsed } from './timeFormat.ts'
 
 function describeError(error: unknown): string {
   return error instanceof ApiError ? error.message : '发生未知错误，请看浏览器控制台'
-}
-
-/**
- * 已计时读数：由 startedAt 与本地当前时刻算出来，不依赖服务端刷新。
- * 落库只发生在开始与结束两次请求上，所以这里的秒数天然会有几百毫秒的漂移——
- * 对「已经干了多久」这个用途来说够用，换来的是不计其数的省下的请求。
- */
-function formatElapsed(startedAt: string, now: number): string {
-  const started = Date.parse(startedAt)
-  if (Number.isNaN(started)) return '--:--'
-  const totalSeconds = Math.max(0, Math.floor((now - started) / 1000))
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
 interface TimerPanelProps {
@@ -81,21 +69,7 @@ export function TimerPanel({ taskId }: TimerPanelProps) {
     },
   })
 
-  const stopMutation = useMutation({
-    mutationFn: (params: { logId: number; markDone: boolean }) =>
-      tasksApi.stopTimer(taskId, params.logId, params.markDone),
-    onSuccess: () => {
-      setMessage(null)
-      // 先用服务端事实把本地置成「没有在跑的计时」，避免重取返回前界面还停在计时态，
-      // 让人以为结束没生效而再点一次（再点会变成 TIMER_NOT_RUNNING 报错）。
-      queryClient.setQueryData(queryKeys.runningTimer, null)
-      void queryClient.invalidateQueries({ queryKey: queryKeys.task(taskId) })
-      void queryClient.invalidateQueries({ queryKey: queryKeys.runningTimer })
-      void queryClient.invalidateQueries({ queryKey: queryKeys.today })
-      void queryClient.invalidateQueries({ queryKey: queryKeys.board })
-    },
-    onError: (error) => setMessage(describeError(error)),
-  })
+  const stopMutation = useStopTimer()
 
   return (
     <div className="space-y-3">
@@ -130,7 +104,13 @@ export function TimerPanel({ taskId }: TimerPanelProps) {
             </label>
             <button
               type="button"
-              onClick={() => stopMutation.mutate({ logId: runningLog.id, markDone })}
+              onClick={() => {
+                setMessage(null)
+                stopMutation.mutate(
+                  { taskId, logId: runningLog.id, markDone },
+                  { onError: (error) => setMessage(describeError(error)) },
+                )
+              }}
               disabled={stopMutation.isPending}
               className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
             >

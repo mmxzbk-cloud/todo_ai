@@ -7,6 +7,9 @@
     "dev": "concurrently -n backend,frontend -c blue,green \"npm:dev:backend\" \"npm:dev:frontend\"",
     "dev:backend": "cd backend && mvnw spring-boot:run",
     "dev:frontend": "pnpm --dir frontend dev",
+    "restart:all": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/restart-dev.ps1",
+    "restart:backend": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/restart-dev.ps1 -Target backend",
+    "restart:frontend": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/restart-dev.ps1 -Target frontend",
     "build": "pnpm --dir frontend build",
     "test:backend": "cd backend && mvnw test"
   },

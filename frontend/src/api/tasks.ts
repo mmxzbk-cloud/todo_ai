@@ -1,6 +1,7 @@
 import type {
   BoardColumn,
   PageResponse,
+  Priority,
   RunningTimer,
   TaskDetail,
   TaskInput,
@@ -57,6 +58,13 @@ export const tasksApi = {
     request<TaskSummary>(`${TASKS}/${id}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
+    }),
+
+  /** 只改优先级；与 changeStatus 同形，落库的是手工覆盖值。 */
+  changePriority: (id: number, priority: Priority) =>
+    request<TaskSummary>(`${TASKS}/${id}/priority`, {
+      method: 'PATCH',
+      body: JSON.stringify({ priority }),
     }),
 
   /** 交上去的是该任务最终应有的完整标签集合，服务端整体替换，不是增量。 */

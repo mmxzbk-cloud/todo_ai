@@ -280,6 +280,18 @@ public class TaskService {
 	}
 
 	/**
+	 * 改优先级。列表/看板上的行内下拉都打这个接口。
+	 * 与 update 里那条「手工覆盖」是同一个含义：落库的值优先，不会被下次矩阵推导改掉。
+	 */
+	@Transactional
+	public TaskResponse changePriority(Long ownerId, Long id, Priority priority) {
+		Task task = require(ownerId, id);
+		applyAndAudit(task, ownerId, "priority", task.getPriority(), priority, task::setPriority);
+		Task saved = taskRepository.saveAndFlush(task);
+		return TaskResponse.from(saved, projectName(ownerId, saved.getProjectId()));
+	}
+
+	/**
 	 * 整体替换任务的标签集合：先删后插。
 	 * 每个 id 都校验「属于当前 owner 且未软删」，缺一个就整批拒绝——
 	 * 部分成功会让前端拿到一个它没提交过的集合。

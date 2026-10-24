@@ -23,6 +23,7 @@ import com.aiassistant.common.PageResponse;
 import com.aiassistant.task.dto.BoardColumnResponse;
 import com.aiassistant.task.dto.TagIdsRequest;
 import com.aiassistant.task.dto.TaskDetailResponse;
+import com.aiassistant.task.dto.TaskPriorityRequest;
 import com.aiassistant.task.dto.TaskRequest;
 import com.aiassistant.task.dto.TaskResponse;
 import com.aiassistant.task.dto.TaskStatusRequest;
@@ -89,6 +90,15 @@ public class TaskController {
 	@PatchMapping("/{id}/status")
 	public TaskResponse changeStatus(@PathVariable Long id, @Valid @RequestBody TaskStatusRequest request) {
 		return service.changeStatus(ownerId(), id, request.status());
+	}
+
+	/**
+	 * 只改优先级。看板与列表上的行内下拉打这个接口，不必为改一个枚举值回传整份任务。
+	 * 与 /status 同形：单独一个端点，语义明确，也不会被「整体替换」的规则牵连。
+	 */
+	@PatchMapping("/{id}/priority")
+	public TaskResponse changePriority(@PathVariable Long id, @Valid @RequestBody TaskPriorityRequest request) {
+		return service.changePriority(ownerId(), id, request.priority());
 	}
 
 	/** 整体替换标签集合，返回更新后的详情，省掉前端一次重新拉详情。 */

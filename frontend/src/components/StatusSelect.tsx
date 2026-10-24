@@ -37,7 +37,7 @@ export function StatusSelect({ task, onError }: StatusSelectProps) {
             { onError: (error) => onError?.(describeError(error)) },
           )
         }}
-        className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm outline-none focus:border-slate-500 disabled:opacity-50"
+        className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs outline-none focus:border-slate-500 disabled:opacity-50"
       >
         {TASK_STATUSES.map((value) => (
           <option key={value} value={value}>
