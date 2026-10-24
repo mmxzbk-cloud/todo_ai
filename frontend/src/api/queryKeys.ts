@@ -16,4 +16,15 @@ export const queryKeys = {
   runningTimer: ['timers', 'running'] as const,
   projects: ['projects'] as const,
   tags: ['tags'] as const,
+  /** 用户设置（当前只有 AI 总开关）。切换开关后按 key 失效，各页面的 AI 入口随之显隐。 */
+  aiSettings: ['settings', 'ai'] as const,
+  /** 耗时统计：区间是 key 的一部分，换今天/7 天/30 天就是另一份缓存。 */
+  timeStats: (from: string, to: string) => ['stats', 'time', from, to] as const,
+  /** 任务概览统计：天数是 key 的一部分，换 7 天/30 天就是另一份缓存。 */
+  taskStats: (days: number) => ['stats', 'tasks', days] as const,
+  // 资讯域（统一挂在 ['news'] 前缀下，写操作按前缀失效）
+  news: ['news'] as const,
+  newsSources: ['news', 'sources'] as const,
+  newsItems: (p: unknown) => ['news', 'list', p] as const,
+  newsItem: (id: number) => ['news', 'detail', id] as const,
 }

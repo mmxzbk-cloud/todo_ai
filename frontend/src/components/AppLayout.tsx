@@ -2,10 +2,13 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 
 import { useAuth } from '../hooks/useAuth.tsx'
 
-/** 导航项。顺序即界面顺序：先看今天要做什么，再看整体状态。 */
+/** 导航项。顺序即界面顺序：先看今天要做什么，再看整体状态，资讯是每日的信息输入，统计是回顾。 */
 const NAV_ITEMS = [
   { to: '/today', label: '今日' },
+  { to: '/tasks', label: '任务' },
   { to: '/board', label: '看板' },
+  { to: '/news', label: '资讯' },
+  { to: '/stats', label: '统计' },
   { to: '/settings', label: '设置' },
 ] as const
 

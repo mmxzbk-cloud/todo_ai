@@ -1,5 +1,6 @@
 package com.aiassistant.task;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
@@ -93,4 +94,37 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
 	 * 软删任务的流水仍在统计口径里，标题一并给出来而不是显示成空。
 	 */
 	List<Task> findByIdInAndOwnerId(Collection<Long> ids, Long ownerId);
+
+	// ---------------------------------------------------------------- 任务统计
+
+	/**
+	 * 按状态分组计数（未删任务的全量快照）。GROUP BY 出来的行是 [枚举, Long]，
+	 * 没有任务的状态不会出现在结果里，服务层负责补零。
+	 */
+	@Query("""
+			SELECT t.status, COUNT(t) FROM Task t
+			WHERE t.ownerId = :ownerId AND t.deletedAt IS NULL
+			GROUP BY t.status
+			""")
+	List<Object[]> countGroupedByStatus(@Param("ownerId") Long ownerId);
+
+	/** 按优先级分组计数，口径与 {@link #countGroupedByStatus(Long)} 相同。 */
+	@Query("""
+			SELECT t.priority, COUNT(t) FROM Task t
+			WHERE t.ownerId = :ownerId AND t.deletedAt IS NULL
+			GROUP BY t.priority
+			""")
+	List<Object[]> countGroupedByPriority(@Param("ownerId") Long ownerId);
+
+	/** 逾期：截止日在今天之前且仍未结束（OPEN_STATUSES）。 */
+	long countByOwnerIdAndDeletedAtIsNullAndDueOnBeforeAndStatusIn(
+			Long ownerId, LocalDate dueOn, Collection<TaskStatus> statuses);
+
+	/** 区间内新建的任务数（按 createdAt 的时刻边界，边界由调用方按用户时区换算）。 */
+	long countByOwnerIdAndDeletedAtIsNullAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+			Long ownerId, Instant createdAtGreaterThanEqual, Instant createdAtLessThan);
+
+	/** 区间内完成的任务明细：完成趋势按天归组时要用 completedAt 归到用户时区的日期，只能在服务层做。 */
+	List<Task> findByOwnerIdAndDeletedAtIsNullAndCompletedAtGreaterThanEqualAndCompletedAtLessThan(
+			Long ownerId, Instant completedAtGreaterThanEqual, Instant completedAtLessThan);
 }

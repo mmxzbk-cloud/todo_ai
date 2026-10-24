@@ -1,5 +1,6 @@
 package com.aiassistant.task;
 
+import java.util.Collection;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -22,6 +23,9 @@ public interface TaskTagRepository extends JpaRepository<TaskTag, TaskTagId> {
 	 */
 	@Query("SELECT tt.id.tagId FROM TaskTag tt WHERE tt.id.taskId = :taskId")
 	List<Long> findTagIdsByTaskId(@Param("taskId") Long taskId);
+
+	/** 批量取一批任务的关联行：列表回填标签时一次查回，不逐行查（N+1）。 */
+	List<TaskTag> findById_TaskIdIn(Collection<Long> taskIds);
 
 	/**
 	 * 批量删除是立即执行的语句，所以「先删后插」的顺序由调用顺序保证。

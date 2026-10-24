@@ -8,9 +8,13 @@ import { projectsApi } from '../api/projects.ts'
 import { queryKeys } from '../api/queryKeys.ts'
 import { tasksApi } from '../api/tasks.ts'
 import { ActivityTimeline } from '../components/ActivityTimeline.tsx'
+import { PrioritySuggestionPanel } from '../components/PrioritySuggestionPanel.tsx'
+import { ReplaceabilitySuggestionPanel } from '../components/ReplaceabilitySuggestionPanel.tsx'
+import { SolutionSuggestionPanel } from '../components/SolutionSuggestionPanel.tsx'
 import { TagPicker } from '../components/TagPicker.tsx'
 import { TimeLogList } from '../components/TimeLogList.tsx'
 import { TimerPanel } from '../components/TimerPanel.tsx'
+import { useAiStatus } from '../hooks/useAi.ts'
 import {
   IMPORTANCE_LABELS,
   IMPORTANCE_LEVELS,
@@ -158,6 +162,8 @@ function TaskDetailPage() {
 
   const [message, setMessage] = useState<string | null>(null)
   const [draft, setDraft] = useState<TaskDraft>(EMPTY_DRAFT)
+  // AI 总开关：关闭（含未加载完）时三个 AI 入口都不渲染，也不会发出 AI 请求（AC 1.3 / 2.6）。
+  const aiEnabled = useAiStatus()
   // 记录草稿是按哪个任务初始化的：从 /tasks/5 跳到 /tasks/7 时组件不会卸载，必须重建草稿。
   // 刻意不按 version 重建：在页面上点一下「开始计时」也会让后端把状态推成 DOING 并换 version，
   // 按 version 重建会把用户正在编辑的内容无声清掉。保存时用的 version 始终取自最新的详情，
@@ -283,7 +289,12 @@ function TaskDetailPage() {
           </div>
           <div>
             <dt className="text-slate-500">优先级</dt>
-            <dd className="text-slate-900">{PRIORITY_LABELS[task.priority]}</dd>
+            <dd className="text-slate-900">
+              <span className="flex flex-wrap items-start gap-2">
+                {PRIORITY_LABELS[task.priority]}
+                {aiEnabled && <PrioritySuggestionPanel taskId={task.id} variant="detail" />}
+              </span>
+            </dd>
           </div>
           <div>
             <dt className="text-slate-500">项目</dt>
@@ -418,6 +429,21 @@ function TaskDetailPage() {
             </Field>
           </div>
 
+          {/* AI 评估（US-04）：结果只进草稿或直接走更新通道，忽略则字段维持原值（AC 4.5）。 */}
+          {aiEnabled && (
+            <ReplaceabilitySuggestionPanel
+              task={task}
+              onWritten={(aiReplaceable, note) => {
+                setDraft((previous) => ({
+                  ...previous,
+                  aiReplaceable: aiReplaceable ? 'true' : 'false',
+                  aiReplacementNote: note,
+                }))
+                setMessage('已写入「AI 可替代」与说明')
+              }}
+            />
+          )}
+
           <Field label="AI 替代方案" htmlFor="detail-ai-note" error={fieldError('aiReplacementNote')}>
             <textarea
               id="detail-ai-note"
@@ -436,6 +462,14 @@ function TaskDetailPage() {
               className={INPUT_CLASS}
             />
           </Field>
+
+          {/* AI 方案建议（US-03）：填入只改表单草稿，不保存则任务原值不变（AC 3.3）。 */}
+          {aiEnabled && (
+            <SolutionSuggestionPanel
+              taskId={task.id}
+              onFillNextAction={(text) => setDraft((previous) => ({ ...previous, nextAction: text }))}
+            />
+          )}
 
           <Field label="备注" htmlFor="detail-notes" error={fieldError('notes')}>
             <textarea
@@ -491,7 +525,8 @@ function TaskDetailPage() {
 
       <section className="rounded-lg border border-slate-200 bg-white p-5">
         <h2 className="mb-4 text-base font-medium text-slate-900">耗时明细</h2>
-        <TimeLogList timeLogs={detail.timeLogs} />
+        {/* 合计用服务端维护的累计值：明细被截断到最近 50 条时，重新求和会偏小（AC 5.1 / 5.2）。 */}
+        <TimeLogList timeLogs={detail.timeLogs} totalMinutes={task.actualMinutes} />
       </section>
 
       <section className="rounded-lg border border-slate-200 bg-white p-5">

@@ -65,10 +65,10 @@ class NewsConvertServiceTest {
 	void convertCreatesTaskViaTaskServiceAndRecordsLink() {
 		NewsItem existing = item();
 		when(itemRepository.findByIdAndOwnerId(ITEM_ID, OWNER)).thenReturn(Optional.of(existing));
-		// TaskResponse 是 23 个分量的 record：测试只关心 id 与 title，其余按类型补零/空
+		// TaskResponse 是 25 个分量的 record：测试只关心 id 与 title，其余按类型补零/空
 		when(taskService.create(eq(OWNER), any(TaskRequest.class)))
 				.thenReturn(new TaskResponse(101L, "研读：教育部发布 AI 教学指南", null, null, null,
-						null, null, null, null, null, null, null, null, 0,
+						null, List.of(), null, null, null, null, null, null, null, null, 0,
 						null, null, null, null, null, 0, 0, null, null));
 
 		ConvertTaskResponse response = service.convert(OWNER, ITEM_ID, new ConvertTaskRequest(null, null, null, null));

@@ -60,6 +60,10 @@ export interface TaskSummary {
   description: string | null
   projectId: number | null
   projectName: string | null
+  /** 项目色由服务端随项目一起回填，卡片直接用它画色点，不必前端再查项目列表。 */
+  projectColor: string | null
+  /** 列表上直接可展示的标签（按名字排序）；与标签的关联由服务端批量回填。 */
+  tags: Tag[]
   parentTaskId: number | null
   source: string | null
   importance: Importance

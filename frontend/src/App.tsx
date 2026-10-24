@@ -4,8 +4,11 @@ import { AppLayout } from './components/AppLayout.tsx'
 import { RequireAuth } from './components/RequireAuth.tsx'
 import BoardPage from './pages/BoardPage.tsx'
 import LoginPage from './pages/LoginPage.tsx'
+import NewsPage from './pages/NewsPage.tsx'
 import SettingsPage from './pages/SettingsPage.tsx'
+import StatsPage from './pages/StatsPage.tsx'
 import TaskDetailPage from './pages/TaskDetailPage.tsx'
+import TasksPage from './pages/TasksPage.tsx'
 import TodayPage from './pages/TodayPage.tsx'
 
 /**
@@ -31,8 +34,11 @@ function App() {
         }
       >
         <Route path="/today" element={<TodayPage />} />
+        <Route path="/tasks" element={<TasksPage />} />
         <Route path="/board" element={<BoardPage />} />
         <Route path="/tasks/:id" element={<TaskDetailPage />} />
+        <Route path="/news" element={<NewsPage />} />
+        <Route path="/stats" element={<StatsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
 

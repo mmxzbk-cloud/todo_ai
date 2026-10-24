@@ -101,8 +101,8 @@ public class TaskService {
 				dueTo != null, dueTo,
 				keyword != null, keyword,
 				pageable);
-		List<TaskResponse> items = TaskMapper.toResponses(found.getContent(), projectNames(ownerId, found.getContent()));
-		return new PageResponse<>(items, found.getTotalElements(), found.getNumber(), found.getSize());
+		return new PageResponse<>(toResponses(ownerId, found.getContent()), found.getTotalElements(),
+				found.getNumber(), found.getSize());
 	}
 
 	/**
@@ -113,19 +113,23 @@ public class TaskService {
 	public List<TaskResponse> today(Long ownerId, ZoneId zoneId) {
 		LocalDate today = LocalDate.now(zoneId);
 		List<Task> tasks = taskRepository.findToday(ownerId, today, TaskStatus.OPEN_STATUSES);
-		return TaskMapper.toResponses(tasks, projectNames(ownerId, tasks));
+		return toResponses(ownerId, tasks);
 	}
 
 	@Transactional(readOnly = true)
 	public List<BoardColumnResponse> board(Long ownerId) {
 		List<Task> tasks = taskRepository.findBoard(ownerId, TaskStatus.BOARD_ORDER);
-		Map<Long, String> projectNames = projectNames(ownerId, tasks);
+		Map<Long, Project> projects = projectsById(ownerId, tasks);
+		Map<Long, List<TagResponse>> tags = tagsByTaskId(ownerId, tasks);
 
 		// 一次查询按状态分组：全局排序已经保证了列内顺序，分组不会打乱它
 		Map<TaskStatus, List<TaskResponse>> columns = new EnumMap<>(TaskStatus.class);
 		for (Task task : tasks) {
+			Long taskId = task.getId();
 			columns.computeIfAbsent(task.getStatus(), key -> new ArrayList<>())
-					.add(TaskResponse.from(task, TaskMapper.projectName(task, projectNames)));
+					.add(TaskResponse.from(task, TaskMapper.projectName(task, projects),
+							TaskMapper.projectColor(task, projects),
+							tags.getOrDefault(taskId, List.of())));
 		}
 		return TaskStatus.BOARD_ORDER.stream()
 				.map(status -> new BoardColumnResponse(status, columns.getOrDefault(status, List.of())))
@@ -135,18 +139,11 @@ public class TaskService {
 	@Transactional(readOnly = true)
 	public TaskDetailResponse getDetail(Long ownerId, Long id) {
 		Task task = require(ownerId, id);
-		Map<Long, String> ownProjectName = projectNames(ownerId, List.of(task));
-		TaskResponse response = TaskResponse.from(task, TaskMapper.projectName(task, ownProjectName));
-
-		List<Long> tagIds = taskTagRepository.findTagIdsByTaskId(id);
-		List<TagResponse> tags = tagIds.isEmpty()
-				? List.of()
-				: tagRepository.findByOwnerIdAndIdInAndDeletedAtIsNullOrderByNameAscIdAsc(ownerId, tagIds).stream()
-						.map(TagResponse::from)
-						.toList();
+		TaskResponse response = toResponse(ownerId, task);
+		List<TagResponse> tags = tagsByTaskId(ownerId, List.of(task)).getOrDefault(id, List.of());
 
 		List<Task> children = taskRepository.findByOwnerIdAndDeletedAtIsNullAndParentTaskIdOrderByIdDesc(ownerId, id);
-		List<TaskResponse> childResponses = TaskMapper.toResponses(children, projectNames(ownerId, children));
+		List<TaskResponse> childResponses = toResponses(ownerId, children);
 
 		// 耗时明细走计时模块冻死的单参方法（已按 startedAt 倒序），条数在这里截：
 		// 契约里没有分页重载，为了一个「最近 50 条」去改对方的仓储不值得，先取全部再 limit 的代价可以忽略
@@ -211,7 +208,7 @@ public class TaskService {
 		Task saved = taskRepository.save(task);
 		// 审计要写在 save 之后：此刻才有任务 id，且库里的行已存在（外键是 RESTRICT，不会静默丢历史）
 		activityRecorder.record(saved.getId(), ownerId, TaskAction.CREATED, null, null, saved.getTitle());
-		return TaskResponse.from(saved, projectName(ownerId, saved.getProjectId()));
+		return toResponse(ownerId, saved);
 	}
 
 	@Transactional
@@ -267,7 +264,7 @@ public class TaskService {
 		// saveAndFlush 而不是 save：@Version 在 flush 时才自增，若把 flush 交给事务提交，
 		// 下面映射出的 version 会是更新前的旧值（是否踩到还取决于本次事务里之后有没有别的查询触发隐式 flush）。
 		Task saved = taskRepository.saveAndFlush(task);
-		return TaskResponse.from(saved, projectName(ownerId, saved.getProjectId()));
+		return toResponse(ownerId, saved);
 	}
 
 	/** 改状态。列表/看板上的下拉都打这个接口，所以它必须自己处理完成时刻，而不是要求前端拼。 */
@@ -276,7 +273,7 @@ public class TaskService {
 		Task task = require(ownerId, id);
 		applyStatusChange(task, ownerId, status, Instant.now());
 		Task saved = taskRepository.saveAndFlush(task);
-		return TaskResponse.from(saved, projectName(ownerId, saved.getProjectId()));
+		return toResponse(ownerId, saved);
 	}
 
 	/**
@@ -288,7 +285,7 @@ public class TaskService {
 		Task task = require(ownerId, id);
 		applyAndAudit(task, ownerId, "priority", task.getPriority(), priority, task::setPriority);
 		Task saved = taskRepository.saveAndFlush(task);
-		return TaskResponse.from(saved, projectName(ownerId, saved.getProjectId()));
+		return toResponse(ownerId, saved);
 	}
 
 	/**
@@ -409,10 +406,28 @@ public class TaskService {
 	}
 
 	/**
-	 * 批量回填项目名：先收集本页出现过的 projectId，一次查回。
-	 * 逐行查项目名在 100 条分页下是 100 次查询，而这个方法的成本与项目数无关。
+	 * 列表类出参的统一组装：项目名/项目色与标签各一次批量查询回填。
+	 * 逐行查在 100 条分页下是上百次查询，而这里的成本与任务数无关。
 	 */
-	private Map<Long, String> projectNames(Long ownerId, Collection<Task> tasks) {
+	private List<TaskResponse> toResponses(Long ownerId, Collection<Task> tasks) {
+		Map<Long, Project> projects = projectsById(ownerId, tasks);
+		Map<Long, List<TagResponse>> tags = tagsByTaskId(ownerId, tasks);
+		return TaskMapper.toResponses(tasks, projects, tags);
+	}
+
+	/** 单条出参（新建/更新/改状态/详情主任务）：复用同一套回填，保证单条与列表的字段口径一致。 */
+	private TaskResponse toResponse(Long ownerId, Task task) {
+		Map<Long, Project> projects = projectsById(ownerId, List.of(task));
+		List<TagResponse> tags = tagsByTaskId(ownerId, List.of(task)).getOrDefault(task.getId(), List.of());
+		return TaskResponse.from(task, TaskMapper.projectName(task, projects), TaskMapper.projectColor(task, projects),
+				tags);
+	}
+
+	/**
+	 * 批量回填项目：先收集出现过的 projectId 一次查回，键是项目 id、值是整个实体
+	 * （名字与颜色都要用，拆成两张 map 反而容易只填其一）。
+	 */
+	private Map<Long, Project> projectsById(Long ownerId, Collection<Task> tasks) {
 		Set<Long> projectIds = tasks.stream()
 				.map(Task::getProjectId)
 				.filter(Objects::nonNull)
@@ -420,18 +435,41 @@ public class TaskService {
 		if (projectIds.isEmpty()) {
 			return Map.of();
 		}
-		Map<Long, String> names = new HashMap<>();
+		Map<Long, Project> projects = new HashMap<>();
 		for (Project project : projectRepository.findByOwnerIdAndIdIn(ownerId, projectIds)) {
-			names.put(project.getId(), project.getName());
+			projects.put(project.getId(), project);
 		}
-		return names;
+		return projects;
 	}
 
-	/** 单个任务出参的项目名（新建/更新/改状态用），返回 null 表示没有项目。 */
-	private String projectName(Long ownerId, Long projectId) {
-		if (projectId == null) {
-			return null;
+	/**
+	 * 批量回填任务标签：task id → 标签列表。标签按名字排序（与详情页同一顺序），
+	 * 软删的标签不回填——关联行可能还挂着已删标签，展示层不该把它当有效标签。
+	 */
+	private Map<Long, List<TagResponse>> tagsByTaskId(Long ownerId, Collection<Task> tasks) {
+		List<Long> taskIds = tasks.stream()
+				.map(Task::getId)
+				.filter(Objects::nonNull)
+				.toList();
+		if (taskIds.isEmpty()) {
+			return Map.of();
 		}
-		return projectRepository.findByIdAndOwnerId(projectId, ownerId).map(Project::getName).orElse(null);
+		List<TaskTag> links = taskTagRepository.findById_TaskIdIn(taskIds);
+		if (links.isEmpty()) {
+			return Map.of();
+		}
+		List<Long> tagIds = links.stream().map(link -> link.getId().getTagId()).distinct().toList();
+		Map<Long, TagResponse> tagById = tagRepository
+				.findByOwnerIdAndIdInAndDeletedAtIsNullOrderByNameAscIdAsc(ownerId, tagIds).stream()
+				.collect(Collectors.toMap(Tag::getId, TagResponse::from));
+
+		Map<Long, List<TagResponse>> result = new HashMap<>();
+		for (TaskTag link : links) {
+			TagResponse tag = tagById.get(link.getId().getTagId());
+			if (tag != null) {
+				result.computeIfAbsent(link.getId().getTaskId(), key -> new ArrayList<>()).add(tag);
+			}
+		}
+		return result;
 	}
 }

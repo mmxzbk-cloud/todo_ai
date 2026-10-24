@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { useAiStatus } from '../hooks/useAi.ts'
 import {
   describeError,
   errorCode,
@@ -10,6 +11,7 @@ import {
 } from '../hooks/useTasks.ts'
 import type { TaskSummary } from '../types/task.ts'
 import { PrioritySelect } from './PrioritySelect.tsx'
+import { PrioritySuggestionPanel } from './PrioritySuggestionPanel.tsx'
 import { StatusSelect } from './StatusSelect.tsx'
 import { formatElapsed } from './timeFormat.ts'
 
@@ -43,13 +45,15 @@ function formatMinutes(minutes: number): string {
  * 中间是标题与项目/截止日，占满宽度，标题不再被右侧的控件挤成竖排；
  * 末行只放计时读数与开始/结束按钮，计时是这条任务上唯一会每秒变化的东西，单独一行不会干扰阅读。
  *
- * 只依赖 TaskSummary 上已有的字段（含后端回填的 projectName），不自己再拉详情——
+ * 只依赖 TaskSummary 上已有的字段（含后端回填的项目名/项目色与标签），不自己再拉详情——
  * 列表里每张卡各发一次请求是典型的 N+1。
  */
 export function TaskCard({ task, onError }: TaskCardProps) {
   const runningTimer = useRunningTimer()
   const startTimer = useStartTimer()
   const stopTimer = useStopTimer()
+  // AI 总开关：关闭时轻量入口不渲染、不发请求（AC 2.6）。多张卡片共用同一份缓存。
+  const aiEnabled = useAiStatus()
   const [now, setNow] = useState(() => Date.now())
 
   const runningLog = runningTimer.data?.log ?? null
@@ -99,10 +103,11 @@ export function TaskCard({ task, onError }: TaskCardProps) {
         {isRunningSelf ? '正在计时' : ''}
       </span>
 
-      {/* 首行：只有状态与优先级两个标记，且都可以就地编辑。 */}
+      {/* 首行：状态与优先级两个标记（都可就地编辑），开关打开时再加一个轻量的 AI 建议入口。 */}
       <div className="flex flex-wrap items-center gap-2">
         <StatusSelect task={task} onError={onError} />
         <PrioritySelect task={task} onError={onError} />
+        {aiEnabled && <PrioritySuggestionPanel taskId={task.id} variant="compact" onError={onError} />}
       </div>
 
       {/* 中间：任务内容本身。 */}
@@ -116,9 +121,36 @@ export function TaskCard({ task, onError }: TaskCardProps) {
           {task.title}
         </Link>
 
-        {(task.projectName || task.dueOn) && (
+        {(task.projectName || task.tags.length > 0 || task.dueOn) && (
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-            {task.projectName && <span>{task.projectName}</span>}
+            {task.projectName && (
+              <span className="flex items-center gap-1.5">
+                {task.projectColor && (
+                  <span
+                    aria-hidden="true"
+                    className="inline-block h-2 w-2 shrink-0 rounded-full border border-slate-300"
+                    style={{ backgroundColor: task.projectColor }}
+                  />
+                )}
+                {task.projectName}
+              </span>
+            )}
+            {task.tags.length > 0 && (
+              <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                {task.tags.map((tag) => (
+                  <span key={tag.id} className="flex items-center gap-1">
+                    {tag.color && (
+                      <span
+                        aria-hidden="true"
+                        className="inline-block h-2 w-2 shrink-0 rounded-full border border-slate-300"
+                        style={{ backgroundColor: tag.color }}
+                      />
+                    )}
+                    {tag.name}
+                  </span>
+                ))}
+              </span>
+            )}
             {task.dueOn && (
               <span className={isOverdue ? 'font-medium text-rose-600' : undefined}>
                 {isOverdue ? `已逾期 ${task.dueOn}` : `截止 ${task.dueOn}`}

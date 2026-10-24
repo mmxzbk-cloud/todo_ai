@@ -17,12 +17,21 @@ function formatMoment(iso: string): string {
 
 interface TimeLogListProps {
   timeLogs: TimeLog[]
+  /**
+   * 任务的服务端累计（tasks.actualMinutes，含未展示的更早明细）。
+   * 合计一律展示它，而不是把最近 50 条明细重新求和——后者在流水超过 50 条时会
+   * 小于真实累计值（PRD US-05 第 1 块的口径缺口）。
+   */
+  totalMinutes: number
 }
 
-export function TimeLogList({ timeLogs }: TimeLogListProps) {
+/** 与后端 TaskService.DETAIL_HISTORY_LIMIT 一致：达到该条数说明明细被截断了。 */
+const DETAIL_HISTORY_LIMIT = 50
+
+export function TimeLogList({ timeLogs, totalMinutes }: TimeLogListProps) {
   // 正在跑的那段 minutes 还是 0，本来就没什么可加的，但它会让「正在进行的记录」显示成 0 分钟，
   // 所以下面单独把它标成「进行中」而不是显示 0。
-  const totalMinutes = timeLogs.reduce((sum, log) => sum + log.minutes, 0)
+  const hasMoreLogs = timeLogs.length >= DETAIL_HISTORY_LIMIT
 
   if (timeLogs.length === 0) {
     return <p className="text-sm text-slate-500">还没有耗时记录，点上面的「开始计时」试试。</p>
@@ -32,6 +41,9 @@ export function TimeLogList({ timeLogs }: TimeLogListProps) {
     <div className="space-y-3">
       <p className="text-sm text-slate-600">
         合计 <span className="font-medium tabular-nums text-slate-900">{totalMinutes}</span> 分钟
+        {hasMoreLogs && (
+          <span className="ml-2 text-xs text-slate-400">明细仅显示最近 {DETAIL_HISTORY_LIMIT} 条</span>
+        )}
       </p>
 
       <ul className="divide-y divide-slate-100">
