@@ -17,6 +17,8 @@ import com.aiassistant.auth.CurrentUserProvider;
 import com.aiassistant.common.PageResponse;
 import com.aiassistant.news.dto.AdoptRequest;
 import com.aiassistant.news.dto.ClassificationRequest;
+import com.aiassistant.news.dto.ConvertTaskRequest;
+import com.aiassistant.news.dto.ConvertTaskResponse;
 import com.aiassistant.news.dto.ItemDetailResponse;
 import com.aiassistant.news.dto.ItemResponse;
 import com.aiassistant.news.dto.ReadRequest;
@@ -25,7 +27,7 @@ import com.aiassistant.news.dto.StarRequest;
 import jakarta.validation.Valid;
 
 /**
- * 资讯库接口（PRD US-03 / US-04 的展示与采纳）。
+ * 资讯库接口（PRD US-03 / US-04 的展示与采纳、US-06 的转任务）。
  * 列表筛选可组合（分类/来源/日期/星标/未读/关键词），日期按用户时区归界。
  */
 @RestController
@@ -34,12 +36,14 @@ public class NewsItemController {
 
 	private final NewsItemService service;
 	private final NewsAiService aiService;
+	private final NewsConvertService convertService;
 	private final CurrentUserProvider currentUserProvider;
 
 	public NewsItemController(NewsItemService service, NewsAiService aiService,
-			CurrentUserProvider currentUserProvider) {
+			NewsConvertService convertService, CurrentUserProvider currentUserProvider) {
 		this.service = service;
 		this.aiService = aiService;
+		this.convertService = convertService;
 		this.currentUserProvider = currentUserProvider;
 	}
 
@@ -90,6 +94,13 @@ public class NewsItemController {
 	@PostMapping("/{id}/ai/adopt")
 	public ItemDetailResponse adopt(@PathVariable Long id, @Valid @RequestBody AdoptRequest request) {
 		return service.adoptAiSuggestions(ownerId(), id, request);
+	}
+
+	/** 资讯转任务（PRD US-06）：经现有任务通道创建，资讯记录关联。 */
+	@PostMapping("/{id}/convert-task")
+	public ConvertTaskResponse convertToTask(@PathVariable Long id,
+			@Valid @RequestBody ConvertTaskRequest request) {
+		return convertService.convert(ownerId(), id, request);
 	}
 
 	private Long ownerId() {
