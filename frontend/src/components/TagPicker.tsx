@@ -43,6 +43,10 @@ export function TagPicker({ taskId, selectedTagIds }: TagPickerProps) {
     onSuccess: () => {
       setMessage('标签已保存')
       void queryClient.invalidateQueries({ queryKey: queryKeys.task(taskId) })
+      // 标签集合会反映在今日/看板/列表的卡片上：只刷详情的话，回到列表看到的还是旧标签。
+      void queryClient.invalidateQueries({ queryKey: queryKeys.today })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.board })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.taskLists })
     },
     onError: (error) => setMessage(describeError(error)),
   })

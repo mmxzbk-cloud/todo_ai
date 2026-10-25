@@ -1,5 +1,6 @@
 import { useState } from 'react'
 
+import { BatchTaskImport } from '../components/BatchTaskImport.tsx'
 import { QuickTaskForm } from '../components/QuickTaskForm.tsx'
 import { TaskCard } from '../components/TaskCard.tsx'
 import { TimeStatsCard } from '../components/TimeStatsCard.tsx'
@@ -30,6 +31,7 @@ function TodayPage() {
 
       <section className="rounded-lg border border-slate-200 bg-white p-5">
         <QuickTaskForm />
+        <BatchTaskImport />
       </section>
 
       {/* 耗时统计（US-05）：只读、不受 AI 总开关影响。 */}

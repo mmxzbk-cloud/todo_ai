@@ -211,6 +211,25 @@ public class TaskService {
 		return toResponse(ownerId, saved);
 	}
 
+	/** 单次批量导入上限：批量是省事的入口，上限防止它变成绕过逐条审核的灌库通道。 */
+	public static final int MAX_BATCH_SIZE = 50;
+
+	/**
+	 * 批量导入（一次新增多条）：逐条复用 {@link #create} 的校验、默认值与审计规则，
+	 * 全程共享一个事务——任何一条失败（如 projectId 不存在）整批回滚，不出现「导了一半」的中间态。
+	 */
+	@Transactional
+	public List<TaskResponse> createBatch(Long ownerId, List<TaskRequest> requests) {
+		if (requests == null || requests.isEmpty()) {
+			throw new BadRequestException(ErrorCode.VALIDATION_FAILED, "至少要有一条任务");
+		}
+		if (requests.size() > MAX_BATCH_SIZE) {
+			throw new BadRequestException(ErrorCode.VALIDATION_FAILED,
+					"单次最多导入 " + MAX_BATCH_SIZE + " 条，当前 " + requests.size() + " 条");
+		}
+		return requests.stream().map(request -> create(ownerId, request)).toList();
+	}
+
 	@Transactional
 	public TaskResponse update(Long ownerId, Long id, TaskRequest request) {
 		Task task = require(ownerId, id);

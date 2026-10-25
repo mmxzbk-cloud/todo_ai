@@ -22,6 +22,7 @@ import com.aiassistant.auth.CurrentUserProvider;
 import com.aiassistant.common.PageResponse;
 import com.aiassistant.task.dto.BoardColumnResponse;
 import com.aiassistant.task.dto.TagIdsRequest;
+import com.aiassistant.task.dto.TaskBatchRequest;
 import com.aiassistant.task.dto.TaskDetailResponse;
 import com.aiassistant.task.dto.TaskPriorityRequest;
 import com.aiassistant.task.dto.TaskRequest;
@@ -79,6 +80,12 @@ public class TaskController {
 	@ResponseStatus(HttpStatus.CREATED)
 	public TaskResponse create(@Valid @RequestBody TaskRequest request) {
 		return service.create(ownerId(), request);
+	}
+
+	/** 批量导入：逐条走单条创建的校验与审计，任一条失败整批回滚。 */
+	@PostMapping("/batch")
+	public List<TaskResponse> createBatch(@Valid @RequestBody TaskBatchRequest request) {
+		return service.createBatch(ownerId(), request.tasks());
 	}
 
 	/** 全量更新；请求带 version 时做乐观锁校验，冲突返回 409 VERSION_CONFLICT。 */

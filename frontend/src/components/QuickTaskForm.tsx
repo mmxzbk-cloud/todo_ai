@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { ApiError } from '../api/client.ts'
 import { projectsApi } from '../api/projects.ts'
@@ -24,6 +24,7 @@ import type { Importance, Urgency } from '../types/task.ts'
  */
 export function QuickTaskForm() {
   const create = useCreateTask()
+  const queryClient = useQueryClient()
   const [title, setTitle] = useState('')
   const [expanded, setExpanded] = useState(false)
   const [dueOn, setDueOn] = useState('')
@@ -83,11 +84,20 @@ export function QuickTaskForm() {
           }
           // 标签沿用既有契约 PUT /tasks/{id}/tags（详情页 TagPicker 同一个接口），
           // 创建接口本身不收 tagIds，这里在创建成功后补一次绑定。
-          tasksApi.assignTags(created.id, tagIds).catch((error: unknown) => {
-            setTagNotice(
-              `任务已创建，但标签保存失败：${describeError(error)}（可在任务详情页重新关联）`,
-            )
-          })
+          // 绑定完成必须把任务列表类缓存刷掉：标签已经会显示在今日/看板/列表的卡片上，
+          // 不刷的话新建的卡片要等下一次重取才出现标签。
+          tasksApi
+            .assignTags(created.id, tagIds)
+            .then(() => {
+              void queryClient.invalidateQueries({ queryKey: queryKeys.today })
+              void queryClient.invalidateQueries({ queryKey: queryKeys.board })
+              void queryClient.invalidateQueries({ queryKey: queryKeys.taskLists })
+            })
+            .catch((error: unknown) => {
+              setTagNotice(
+                `任务已创建，但标签保存失败：${describeError(error)}（可在任务详情页重新关联）`,
+              )
+            })
         },
       },
     )

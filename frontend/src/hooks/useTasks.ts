@@ -85,6 +85,20 @@ export function useCreateTask() {
   })
 }
 
+/** 批量导入：缓存影响与单条创建完全一致，只是一次要刷新的是 N 条任务。 */
+export function useBatchCreateTasks() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (inputs: TaskInput[]) => tasksApi.batchCreate(inputs),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.today })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.board })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.taskLists })
+    },
+  })
+}
+
 export function useStartTimer() {
   const queryClient = useQueryClient()
 

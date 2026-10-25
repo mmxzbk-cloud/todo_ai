@@ -3,10 +3,11 @@ import { useQuery } from '@tanstack/react-query'
 
 import { statsApi } from '../api/stats.ts'
 import { queryKeys } from '../api/queryKeys.ts'
+import { StatsBarChart } from '../components/charts/StatsBarChart.tsx'
+import { StatsDonutChart } from '../components/charts/StatsDonutChart.tsx'
 import { TimeStatsCard } from '../components/TimeStatsCard.tsx'
 import { describeError } from '../hooks/useTasks.ts'
 import { PRIORITIES, TASK_STATUSES, TASK_STATUS_LABELS } from '../types/task.ts'
-import type { StatsDayCompletion } from '../types/stats.ts'
 
 type RangeKey = '7d' | '30d'
 
@@ -18,9 +19,12 @@ const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
 /** 概览统计不提供「今天」单日档：单日的完成数没有回顾价值，最小 7 天。 */
 const DAYS_FOR: Record<RangeKey, number> = { '7d': 7, '30d': 30 }
 
-function formatCountBar(count: number, max: number): string {
-  if (max <= 0 || count <= 0) return '0%'
-  return `${Math.max(Math.round((count / max) * 100), 4)}%`
+/** 与优先级徽标同一套色相（PrioritySelect 的 P0 rose / P1 amber / P2 sky / P3 slate），加深到 -600 保证白底可读。 */
+const PRIORITY_CHART_COLORS: Record<string, string> = {
+  P0: '#e11d48',
+  P1: '#d97706',
+  P2: '#0284c7',
+  P3: '#94a3b8',
 }
 
 /** 概览数字块：一个标签 + 一个大数字，逾期等告警口径用 tone 染色。 */
@@ -30,23 +34,6 @@ function StatBox({ label, value, tone }: { label: string; value: number; tone?: 
       <p className="text-xs text-slate-500">{label}</p>
       <p className={`mt-1 text-2xl font-semibold tabular-nums ${tone ?? 'text-slate-900'}`}>{value}</p>
     </div>
-  )
-}
-
-/** 完成趋势的单日行：日期 + 比例条 + 完成数。 */
-function DayCompletionRow({ day, maxCount }: { day: StatsDayCompletion; maxCount: number }) {
-  return (
-    <li className="text-sm">
-      <div className="flex items-baseline gap-2">
-        <span className="w-12 shrink-0 tabular-nums text-slate-500">{day.date.slice(5)}</span>
-        <span className="min-w-0 flex-1">
-          <span className="block h-2 rounded bg-slate-200">
-            <span className="block h-2 rounded bg-slate-700" style={{ width: formatCountBar(day.count, maxCount) }} />
-          </span>
-        </span>
-        <span className="w-8 shrink-0 text-right tabular-nums text-slate-900">{day.count}</span>
-      </div>
-    </li>
   )
 }
 
@@ -67,8 +54,6 @@ function StatsPage() {
 
   const data = stats.data
   const totalTasks = data ? Object.values(data.byStatus).reduce((sum, count) => sum + count, 0) : 0
-  const maxDayCount = data ? Math.max(...data.completedByDay.map((day) => day.count), 0) : 0
-  const maxPriorityCount = data ? Math.max(...Object.values(data.byPriority), 0) : 0
 
   return (
     <div className="space-y-6">
@@ -137,29 +122,19 @@ function StatsPage() {
 
                 <div>
                   <h3 className="mb-2 text-xs font-medium text-slate-500">完成趋势（按天）</h3>
-                  <ul className="space-y-1.5">
-                    {data.completedByDay.map((day) => (
-                      <DayCompletionRow key={day.date} day={day} maxCount={maxDayCount} />
-                    ))}
-                  </ul>
+                  <StatsBarChart
+                    ariaLabel={`近 ${days} 天每天完成任务数柱状图`}
+                    data={data.completedByDay.map((day) => ({ label: day.date.slice(5), value: day.count }))}
+                  />
                 </div>
 
                 <div>
                   <h3 className="mb-2 text-xs font-medium text-slate-500">优先级分布</h3>
-                  <ul className="space-y-1.5">
-                    {PRIORITIES.map((priority) => (
-                      <li key={priority} className="flex items-center gap-2 text-sm">
-                        <span className="w-8 shrink-0 text-slate-700">{priority}</span>
-                        <span className="h-2 w-24 shrink-0 rounded bg-slate-200">
-                          <span
-                            className="block h-2 rounded bg-slate-500"
-                            style={{ width: formatCountBar(data.byPriority[priority], maxPriorityCount) }}
-                          />
-                        </span>
-                        <span className="tabular-nums text-slate-900">{data.byPriority[priority]}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  <StatsDonutChart
+                    ariaLabel="各优先级任务数环形图"
+                    colors={PRIORITIES.map((priority) => PRIORITY_CHART_COLORS[priority])}
+                    data={PRIORITIES.map((priority) => ({ name: priority, value: data.byPriority[priority] }))}
+                  />
                 </div>
               </div>
             )}

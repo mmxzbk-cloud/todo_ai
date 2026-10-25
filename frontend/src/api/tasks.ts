@@ -50,6 +50,13 @@ export const tasksApi = {
   create: (input: TaskInput) =>
     request<TaskSummary>(TASKS, { method: 'POST', body: JSON.stringify(input) }),
 
+  /**
+   * 批量导入：一次提交多条，后端在同一个事务里逐条创建（任一条失败整批回滚），
+   * 返回按输入顺序排列的创建结果。上限与后端 TaskService.MAX_BATCH_SIZE 一致（50）。
+   */
+  batchCreate: (inputs: TaskInput[]) =>
+    request<TaskSummary[]>(`${TASKS}/batch`, { method: 'POST', body: JSON.stringify({ tasks: inputs }) }),
+
   /** 整体替换；带 version 时做乐观锁校验，冲突返回 409 VERSION_CONFLICT。 */
   update: (id: number, input: TaskUpdateInput) =>
     request<TaskSummary>(`${TASKS}/${id}`, { method: 'PUT', body: JSON.stringify(input) }),
